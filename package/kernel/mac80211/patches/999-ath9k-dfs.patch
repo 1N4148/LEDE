@@ -1,0 +1,58 @@
+--- a/drivers/net/wireless/ath/ath9k/dfs.c
++++ b/drivers/net/wireless/ath/ath9k/dfs.c
+@@ -205,6 +205,7 @@ ath9k_postprocess_radar_event(struct ath
+ {
+ 	u8 rssi;
+ 	u16 dur;
++	u32 width;
+ 
+ 	/*
+ 	 * Only the last 2 bits of the BW info are relevant, they indicate
+@@ -259,13 +260,21 @@ ath9k_postprocess_radar_event(struct ath
+ 		return false;
+ 	}
+ 
+-	if (rssi == 0) {
++	/* discard pulses with a too low rssi */
++	if (rssi <= 20) {
+ 		DFS_STAT_INC(sc, rssi_discards);
+ 		return false;
+ 	}
+ 
+ 	/* convert duration to usecs */
+-	pe->width = dur_to_usecs(sc->sc_ah, dur);
++	width = dur_to_usecs(sc->sc_ah, dur);
++	/* discard zero length pulses and pulses too long */
++	if ((width == 0) || (width >= MAX_CHIRP_PULSE_WIDTH)) {
++	        DFS_STAT_INC(sc, pulses_no_dfs);
++		return false;
++        }
++
++	pe->width = width;
+ 	pe->rssi = rssi;
+ 
+ 	DFS_STAT_INC(sc, pulses_detected);
+@@ -335,15 +344,15 @@ void ath9k_dfs_process_phyerr(struct ath
+ 	if (!ath9k_postprocess_radar_event(sc, &ard, &pe))
+ 		return;
+ 
+-	if (pe.width > MIN_CHIRP_PULSE_WIDTH &&
+-	    pe.width < MAX_CHIRP_PULSE_WIDTH) {
+-		bool is_ctl = !!(ard.pulse_bw_info & PRI_CH_RADAR_FOUND);
+-		bool is_ext = !!(ard.pulse_bw_info & EXT_CH_RADAR_FOUND);
+-		int clen = datalen - 3;
+-		pe.chirp = ath9k_check_chirping(sc, data, clen, is_ctl, is_ext);
+-	} else {
++//	if (pe.width > MIN_CHIRP_PULSE_WIDTH &&
++//	    pe.width < MAX_CHIRP_PULSE_WIDTH) {
++//		bool is_ctl = !!(ard.pulse_bw_info & PRI_CH_RADAR_FOUND);
++//		bool is_ext = !!(ard.pulse_bw_info & EXT_CH_RADAR_FOUND);
++//		int clen = datalen - 3;
++//		pe.chirp = ath9k_check_chirping(sc, data, clen, is_ctl, is_ext);
++//	} else {
+ 		pe.chirp = false;
+-	}
++//	}
+ 
+ 	ath_dbg(common, DFS,
+ 		"ath9k_dfs_process_phyerr: type=%d, freq=%d, ts=%llu, "
